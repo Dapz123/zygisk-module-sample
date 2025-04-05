@@ -1,0 +1,25 @@
+name: Build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build_project:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set Up Gradle
+        run: chmod +x ./gradlew
+
+      - name: Build Project
+        run: |
+          ./gradlew :lib:assembleRelease
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: module-magisk
+          path: lib/out
