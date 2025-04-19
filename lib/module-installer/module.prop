@@ -1,6 +1,6 @@
-id=com.devdpz.zygs
-name=Module Magisk Sample
-version=1.0
+id=com.dpzdev.module
+name=Module Sample
+version=1.2
 versionCode=1
 author=Dapz
-description=Module magisk sample
+description=Zygisk module sample project

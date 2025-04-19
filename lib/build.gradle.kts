@@ -4,6 +4,8 @@ plugins {
     alias(libs.plugins.android.lib)
 }
 
+val libName = "mymodule"
+
 android {
     namespace = "com.dpzdev.module"
     compileSdk = 35
@@ -14,6 +16,7 @@ android {
     
         externalNativeBuild {
             cmake {
+                arguments += "-DPROJECT_NAME=$libName"
                 cppFlags += "-std=c++17"
             }
         }
@@ -33,57 +36,51 @@ android {
 }
 
 afterEvaluate {
-  android.libraryVariants.forEach { variant ->
+    android.libraryVariants.forEach { variant ->
 
-    val varType = variant.name.capitalize()
-    var varTypeLow = variant.name.lowercase()
-    val projectDir = project.layout.projectDirectory.asFile
-    val moduleDir = File(projectDir, "module-installer")
-    val outDir = File(projectDir, "out")
+        var buildVariant      = variant.name.capitalize()
+        val buildVariantLowered = variant.name.lowercase()
+        
+        val abiFilter = listOf("arm64-v8a", "armeabi-v7a")
+        val projectDir = "${project.layout.projectDirectory}"
+        val buildDir = "${project.layout.buildDirectory.get()}"
+        val script = File(projectDir, "/module-installer")
+        val moduleOut = File(buildDir, "/my-module")
 
-    tasks.register<Copy>("magisk$varType") {
+        tasks.register<Copy>("prepareMagisk$buildVariant") {
+            dependsOn("assemble$buildVariant")
+            from(script)
+            into(moduleOut)
+            println("Create module template")
+            doLast {
 
-      dependsOn("assemble$varType")
-      from(moduleDir)
-      into(outDir)
+                abiFilter.forEach { type ->
 
-      doLast {
-        println("Running tasks : module$varType")
+                    val nativeLibs = File("$buildDir/intermediates/stripped_native_libs/${buildVariantLowered}/strip${buildVariant}DebugSymbols/out/lib/$type/lib$libName.so")
+                    val zygiskDir = File("$moduleOut/zygisk/")
 
-        val archs = listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
-        archs.forEach { arch ->
+                    if ( nativeLibs.exists() ) {
+                        nativeLibs.copyTo( File(zygiskDir, "$type.so"), overwrite = true )
+                        println("Copied native libs")
+                    } else {
+                        println("Native libs is not found on $nativeLibs")
+                    }
 
-            val srcDir = File("${project.layout.buildDirectory.get()}/intermediates/stripped_native_libs/$varTypeLow/strip${varType}DebugSymbols/out/lib/$arch/libmodule.so")
-            val destDir = File(outDir, "zygisk/")
+                }
             
-            if (srcDir.exists()) {
-                println("Library for $arch found, proceeding with transfer.")
-                srcDir.copyTo(File(destDir, "$arch.so"), overwrite = true)
-            } else {
-                println("Error: Library for $arch not found!\n\t$srcDir")
             }
 
+            finalizedBy("zipModule$buildVariant")
+
         }
 
-      }
-
-      finalizedBy("zip$varType")
-
-    } // magisk tasks
-
-    tasks.register<Zip>("zip$varType") {
-        doFirst {
-            println("Creating a zip archive of the module.")
+        tasks.register<Zip>("zipModule$buildVariant") {
+            println("Creating zip for the module")
+            archiveFileName.set("my-module.zip")
+            destinationDirectory.set( project.layout.buildDirectory.get() )
+            from(moduleOut)
         }
-
-        archiveFileName.set("module-$varTypeLow.zip")
-        destinationDirectory.set(project.layout.buildDirectory.get())
-        from(outDir)
-
+        
+        variant.assembleProvider.get().finalizedBy(tasks.named("prepareMagisk$buildVariant"))
     }
-    
-    variant.assembleProvider.get().finalizedBy(tasks.named("magisk$varType"))
-  
-  } // variant for each
-  
-} // after evaluate
+}
